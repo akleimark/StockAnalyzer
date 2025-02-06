@@ -54,7 +54,9 @@ class DatabaseManager:
 
     def get_all_stocks(self):
         self.cursor.execute("SELECT * FROM stocks ORDER BY name, the_date")
-        return self.cursor.fetchall()
+        stocks = self.cursor.fetchall()
+        return stocks
+        #return [Stock(name, date, price) for name, date, price in stocks]
 
     def get_stock_history(self, stock_name):
         self.cursor.execute("SELECT the_date, price FROM stocks WHERE name = ? ORDER BY the_date", (stock_name,))

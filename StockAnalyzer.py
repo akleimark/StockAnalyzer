@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
+
 import sys
 import csv
+import numpy as np
+import pandas as pd
+from datetime import datetime
+
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QInputDialog, QAction, QMenu, QMainWindow, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget, QFileDialog
 )
+from matplotlib import pyplot as plt
 from Database import DatabaseManager
+from Stock import TechnicalAnalyzer
 
 
 class StockAnalyzer(QMainWindow):
@@ -19,6 +26,7 @@ class StockAnalyzer(QMainWindow):
         super().__init__()
 
         self.db = DatabaseManager()
+        self.analyzer = TechnicalAnalyzer()
         self.selected_stock = None
         self.setWindowTitle("Aktie-app")
         self.setGeometry(self.start_x, self.start_y, self.end_x, self.end_y)
@@ -61,6 +69,13 @@ class StockAnalyzer(QMainWindow):
         self.tools_menu.addAction(self.graph_action)
         self.tools_menu.addAction(self.import_csv_action)
 
+        # Teknisk analys-menyn
+        self.technical_analysis_menu = menu_bar.addMenu("Teknisk analys")
+        self.moving_average_action = QAction("Glidande medelvärde", self)
+        self.moving_average_action.setEnabled(False)
+        self.moving_average_action.triggered.connect(self.show_moving_average)
+        self.technical_analysis_menu.addAction(self.moving_average_action)
+
     def populate_stock_menu(self, stock_menu):
         stocks = self.db.get_all_stocks() or []
         unique_stock_names = set(stock[1] for stock in stocks)
@@ -75,6 +90,7 @@ class StockAnalyzer(QMainWindow):
         self.table_action.setEnabled(True)
         self.graph_action.setEnabled(True)
         self.import_csv_action.setEnabled(True)
+        self.moving_average_action.setEnabled(True)
 
     def add_stock(self):
         name, ok = QInputDialog.getText(self, 'Ny aktie', 'Ange aktiens namn:')
@@ -119,8 +135,36 @@ class StockAnalyzer(QMainWindow):
             self.setCentralWidget(central_widget)
 
     def show_graph(self):
-        if self.selected_stock:
-            print(f"Visa graf för {self.selected_stock}")
+        if not self.selected_stock:
+            print("Ingen aktie vald!")
+            return
+
+        # Hämta aktiens historik från databasen
+        history = self.db.get_stock_history(self.selected_stock)
+        if not history:
+            print(f"Ingen historik hittades för {self.selected_stock}.")
+            return
+
+        # Dela upp data i datum och pris
+        dates = [datetime.strptime(date, "%Y-%m-%d").date() for date, _ in history]
+        prices = [price for _, price in history]
+
+        # Skapa grafen
+        plt.figure(figsize=(10, 5))
+        plt.plot(dates, prices, marker='o', linestyle='-', color='b', label=self.selected_stock)
+
+        # Anpassa utseendet
+        plt.xlabel("Datum")
+        plt.ylabel("Pris (SEK)")
+        plt.title(f"Prisgraf för {self.selected_stock}")
+        plt.legend()
+        plt.grid(True)
+
+        # Rotera datumaxeln för bättre läsbarhet
+        plt.xticks(rotation=45)
+
+        # Visa grafen
+        plt.show()
 
     def import_stock_data(self):
         """Importerar aktievärden från en CSV-fil och uppdaterar databasen."""
@@ -157,10 +201,6 @@ class StockAnalyzer(QMainWindow):
                         print(f"Ogiltigt prisformat: {row}")
                         continue
 
-                    #print("Aktie: " + self.selected_stock)
-                    #print(" Datum: " + date)
-                    #print(" Pris: " + str(price))
-
                     # Kontrollera om aktien finns
                     if not self.db.stock_exists(self.selected_stock):
                         print(f"Fel vid import:")
@@ -176,6 +216,18 @@ class StockAnalyzer(QMainWindow):
 
         except Exception as e:
             print(f"Fel vid import: {e}")
+
+    def show_moving_average(self):
+        if not self.selected_stock:
+            print("Ingen aktie vald!")
+            return
+
+        history = self.db.get_stock_history(self.selected_stock)
+        if not history:
+            print(f"Ingen historik hittades för {self.selected_stock}.")
+            return
+
+        self.analyzer.apply_moving_average_strategy(self.selected_stock, history)
 
 
 if __name__ == "__main__":
