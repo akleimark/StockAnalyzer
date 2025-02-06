@@ -11,7 +11,10 @@ from PyQt5.QtWidgets import (
     QApplication, QInputDialog, QAction, QMenu, QMainWindow, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget, QFileDialog
 )
-from matplotlib import pyplot as plt
+import matplotlib
+matplotlib.use("Qt5Agg")  # Om du använder en Qt-baserad miljö
+import matplotlib.pyplot as plt
+
 from Database import DatabaseManager
 from Stock import TechnicalAnalyzer
 
