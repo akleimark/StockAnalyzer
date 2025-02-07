@@ -3,21 +3,17 @@
 import sys
 import csv
 import numpy as np
-import pandas as pd
 from datetime import datetime
-
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QInputDialog, QAction, QMenu, QMainWindow, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget, QFileDialog
+    QTableWidgetItem, QVBoxLayout, QWidget, QFileDialog, QLabel, QGridLayout
 )
 import matplotlib
 matplotlib.use("Qt5Agg")  # Om du använder en Qt-baserad miljö
 import matplotlib.pyplot as plt
-
 from Database import DatabaseManager
 from Stock import TechnicalAnalyzer
-
 
 class StockAnalyzer(QMainWindow):
     start_x = 100
@@ -28,6 +24,14 @@ class StockAnalyzer(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.import_csv_action = None
+        self.graph_action = None
+        self.moving_average_action = None
+        self.technical_analysis_menu = None
+        self.table_action = None
+        self.add_stock_data_action = None
+        self.show_stock_info_action = None
+        self.tools_menu = None
         self.db = DatabaseManager()
         self.analyzer = TechnicalAnalyzer()
         self.selected_stock = None
@@ -56,18 +60,26 @@ class StockAnalyzer(QMainWindow):
 
         # Verktygsmeny
         self.tools_menu = menu_bar.addMenu("Verktyg")
+        self.show_stock_info_action = QAction("Visa information", self)
+        self.add_stock_data_action = QAction("Lägg till data", self)
         self.table_action = QAction("Tabell", self)
         self.graph_action = QAction("Graf", self)
         self.import_csv_action = QAction("Importera CSV", self)
 
+        self.show_stock_info_action.setEnabled(False)
+        self.add_stock_data_action.setEnabled(False)
         self.table_action.setEnabled(False)
         self.graph_action.setEnabled(False)
         self.import_csv_action.setEnabled(False)
 
+        self.show_stock_info_action.triggered.connect(self.show_stock_info)
+        self.add_stock_data_action.triggered.connect(self.add_stock_data)
         self.table_action.triggered.connect(self.show_table)
         self.graph_action.triggered.connect(self.show_graph)
         self.import_csv_action.triggered.connect(self.import_stock_data)
 
+        self.tools_menu.addAction(self.show_stock_info_action)
+        self.tools_menu.addAction(self.add_stock_data_action)
         self.tools_menu.addAction(self.table_action)
         self.tools_menu.addAction(self.graph_action)
         self.tools_menu.addAction(self.import_csv_action)
@@ -90,10 +102,66 @@ class StockAnalyzer(QMainWindow):
 
     def select_stock(self, stock_name):
         self.selected_stock = stock_name
+        self.show_stock_info_action.setEnabled(True)
         self.table_action.setEnabled(True)
         self.graph_action.setEnabled(True)
         self.import_csv_action.setEnabled(True)
         self.moving_average_action.setEnabled(True)
+        self.add_stock_data_action.setEnabled(True)
+
+    def show_stock_info(self):
+        variance = 0.0
+        if not self.selected_stock:
+            return
+
+        # Hämta historik för de senaste 6 månaderna
+        history = self.db.get_stock_history(self.selected_stock, 6)
+        if not history:
+            stock_info_text = f"Aktie: {self.selected_stock}\n\nIngen data för de senaste 6 månaderna."
+        else:
+            # Extrahera priser
+            prices = [price for _, price in history]
+
+            # Beräkna variansen
+            variance = np.var(prices, ddof=1) if len(prices) > 1 else 0
+
+            # Formatera texten
+            stock_info_text = f"Aktie: {self.selected_stock}\n\nVarians (senaste 6 månaderna): {variance:.2f}"
+
+        label_title_font = QFont("Georgia", 16)
+        label_title_font.setBold(True)
+        label_normal_font = QFont("Georgia", 14)
+        central_widget = QWidget(self)
+        layout = QGridLayout(central_widget)
+        label1 = QLabel("Namn: ")
+        label1.setFont(label_title_font)
+        label2 = QLabel(self.selected_stock)
+        label2.setFont(label_normal_font)
+        label3 = QLabel("Varians: ")
+        label3.setFont(label_title_font)
+        label4 = QLabel(str(format(variance, ".2f")))
+        label4.setFont(label_normal_font)
+        layout.addWidget(label1, 0, 0)
+        layout.addWidget(label2, 0, 1)
+        layout.addWidget(label3, 1, 0)
+        layout.addWidget(label4, 1, 1)
+
+        self.setCentralWidget(central_widget)
+
+    def add_stock_data(self):
+        date, ok = QInputDialog.getText(self, self.selected_stock, 'Ange datum (YYYY-MM-DD):')
+        if ok and date:
+            price, ok = QInputDialog.getDouble(self, self.selected_stock, 'Ange aktiens pris:')
+            if ok:
+                # Kontrollera om datumet finns för den valda aktien
+                if self.db.stock_exists_for_date(self.selected_stock, date):
+                    print(f"Aktien {self.selected_stock} finns och datumet {date} finns, uppdaterar priset.")
+                    self.db.update_stock_price(self.selected_stock, date, price)  # Uppdatera om datumet finns
+                else:
+                    print(f"Aktien {self.selected_stock} finns, men datumet {date} saknas, lägg till nytt datum.")
+                    self.db.add_stock(self.selected_stock, date, price)  # Lägg till om datumet saknas
+
+        self.refresh_menu()
 
     def add_stock(self):
         name, ok = QInputDialog.getText(self, 'Ny aktie', 'Ange aktiens namn:')

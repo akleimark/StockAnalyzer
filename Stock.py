@@ -46,11 +46,9 @@ class TechnicalAnalyzer:
         # Markera köp- och säljsignaler
         for date, price in buy_signals:
             plt.scatter(date, price, color="green", marker="^", s=150, edgecolors="black", linewidth=1.5, label="Köp" if "Köp" not in plt.gca().get_legend_handles_labels()[1] else "" )
-            #plt.text(date, price, f"{price:.2f}", fontsize=10, verticalalignment="bottom", horizontalalignment="left", color="green")
 
         for date, price in sell_signals:
             plt.scatter(date, price, color="red", marker="v", s=150, edgecolors="black", linewidth=1.5, label="Sälj" if "Sälj" not in plt.gca().get_legend_handles_labels()[1] else "")
-            #plt.text(date, price, f"{price:.2f}", fontsize=10, verticalalignment="top", horizontalalignment="right", color="red")
 
         plt.xlabel("Datum")
         plt.ylabel("Pris (SEK)")

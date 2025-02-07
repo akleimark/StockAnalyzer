@@ -58,8 +58,13 @@ class DatabaseManager:
         return stocks
         #return [Stock(name, date, price) for name, date, price in stocks]
 
-    def get_stock_history(self, stock_name):
-        self.cursor.execute("SELECT the_date, price FROM stocks WHERE name = ? ORDER BY the_date", (stock_name,))
+    def get_stock_history(self, stock_name, months=6):
+        self.cursor.execute(
+            "SELECT the_date, price FROM stocks "
+            "WHERE name = ? AND the_date >= DATE('now', ? || ' months') "
+            "ORDER BY the_date",
+            (stock_name, f'-{months}')
+        )
         return self.cursor.fetchall()
 
     def close(self):
