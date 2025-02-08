@@ -10,7 +10,8 @@ class TechnicalAnalyzer:
             print("För lite data för att beräkna SMA.")
             return
 
-        df = pd.DataFrame(stock_data, columns=["Date", "Price"])
+        # Anpassa dataframe till den nya strukturen
+        df = pd.DataFrame(stock_data, columns=["Date", "Price", "Volume"])  # Inkludera volym men ignorera den för SMA
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values("Date")
 
@@ -48,10 +49,12 @@ class TechnicalAnalyzer:
 
         # Markera köp- och säljsignaler
         for date, price in buy_signals:
-            plt.scatter(date, price, color="green", marker="^", s=150, edgecolors="black", linewidth=1.5, label="Köp" if "Köp" not in plt.gca().get_legend_handles_labels()[1] else "" )
+            plt.scatter(date, price, color="green", marker="^", s=150, edgecolors="black", linewidth=1.5,
+                        label="Köp" if "Köp" not in plt.gca().get_legend_handles_labels()[1] else "")
 
         for date, price in sell_signals:
-            plt.scatter(date, price, color="red", marker="v", s=150, edgecolors="black", linewidth=1.5, label="Sälj" if "Sälj" not in plt.gca().get_legend_handles_labels()[1] else "")
+            plt.scatter(date, price, color="red", marker="v", s=150, edgecolors="black", linewidth=1.5,
+                        label="Sälj" if "Sälj" not in plt.gca().get_legend_handles_labels()[1] else "")
 
         plt.xlabel("Datum")
         plt.ylabel("Pris (SEK)")
@@ -87,7 +90,7 @@ class TechnicalAnalyzer:
         Plottar prisutvecklingen och EMA för en aktie med köp- och säljsignaler.
         Skriver även ut signalerna i konsolen i samma format som SMA.
         :param stock_name: Namnet på aktien.
-        :param history: Lista av tuples (datum, pris).
+        :param history: Lista av tuples (datum, pris, volym).
         :param period: EMA-period.
         """
 
@@ -95,29 +98,32 @@ class TechnicalAnalyzer:
             print("Otillräckligt med data för EMA-beräkning.")
             return
 
-        dates = [datetime.strptime(date, "%Y-%m-%d").date() for date, _ in history]
-        prices = [price for _, price in history]
+        # Hantera tre kolumner: (datum, pris, volym), men vi använder bara datum och pris
+        df = pd.DataFrame(history, columns=["Date", "Price", "Volume"])
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date")
 
-        ema_values = self.calculate_ema(prices, period)
+        df["EMA"] = self.calculate_ema(df["Price"], period)
 
         buy_signals = []
         sell_signals = []
 
         # Identifiera köp- och säljsignaler
-        for i in range(1, len(prices)):
-            if ema_values[i] is None:
+        prev_price, prev_ema = None, None
+        for i in range(len(df)):
+            if pd.isna(df.loc[i, "EMA"]):
                 continue  # Hoppa över perioder där EMA ej beräknats
 
-            prev_price = prices[i - 1]
-            prev_ema = ema_values[i - 1] if ema_values[i - 1] is not None else prev_price
-            curr_price = prices[i]
-            curr_ema = ema_values[i]
+            price, ema = df.loc[i, "Price"], df.loc[i, "EMA"]
 
-            if prev_price < prev_ema and curr_price > curr_ema:
-                buy_signals.append((dates[i], curr_price))  # Köp
+            if prev_price is not None and prev_ema is not None:
+                if prev_price < prev_ema and price > ema:
+                    buy_signals.append((df.loc[i, "Date"], price))  # Köp
 
-            elif prev_price > prev_ema and curr_price < curr_ema:
-                sell_signals.append((dates[i], curr_price))  # Sälj
+                elif prev_price > prev_ema and price < ema:
+                    sell_signals.append((df.loc[i, "Date"], price))  # Sälj
+
+            prev_price, prev_ema = price, ema
 
         # Skriv ut signalerna på samma sätt som i SMA
         print(f"\n📈 Köp-signaler för {stock_name}:")
@@ -130,15 +136,17 @@ class TechnicalAnalyzer:
 
         # Plotta grafen
         plt.figure(figsize=(10, 5))
-        plt.plot(dates, prices, marker='o', linestyle='-', color='b', label="Pris")
-        plt.plot(dates, ema_values, linestyle='-', color='r', label=f"EMA ({period} dagar)")
+        plt.plot(df["Date"], df["Price"], marker='o', linestyle='-', color='b', label="Pris")
+        plt.plot(df["Date"], df["EMA"], linestyle='-', color='r', label=f"EMA ({period} dagar)")
 
         # Markera köp- och säljsignaler i grafen
-        buy_dates, buy_prices = zip(*buy_signals) if buy_signals else ([], [])
-        sell_dates, sell_prices = zip(*sell_signals) if sell_signals else ([], [])
+        for date, price in buy_signals:
+            plt.scatter(date, price, marker='^', color='g', s=100, edgecolors="black", linewidth=1.5,
+                        label="Köp" if "Köp" not in plt.gca().get_legend_handles_labels()[1] else "")
 
-        plt.scatter(buy_dates, buy_prices, marker='^', color='g', label="Köp", s=100)
-        plt.scatter(sell_dates, sell_prices, marker='v', color='r', label="Sälj", s=100)
+        for date, price in sell_signals:
+            plt.scatter(date, price, marker='v', color='r', s=100, edgecolors="black", linewidth=1.5,
+                        label="Sälj" if "Sälj" not in plt.gca().get_legend_handles_labels()[1] else "")
 
         # Anpassa utseendet
         plt.xlabel("Datum")
@@ -148,3 +156,154 @@ class TechnicalAnalyzer:
         plt.grid(True)
         plt.xticks(rotation=45)
         plt.show()
+
+    def calculate_roc(self, prices, period=14):
+        """
+        Beräknar Rate of Change (ROC) för en given period.
+        :param prices: Lista med prisdata.
+        :param period: Antal perioder för att beräkna ROC (default: 14).
+        :return: Lista med ROC-värden.
+        """
+        if len(prices) < period:
+            print("Otillräckligt med data för ROC-beräkning.")
+            return []
+
+        roc_values = []
+        for i in range(period, len(prices)):
+            roc = ((prices[i] - prices[i - period]) / prices[i - period]) * 100
+            roc_values.append(roc)
+
+        # Fyller början med None för att matcha längden på priserna
+        return [None] * period + roc_values
+
+    def apply_roc_strategy(self, stock_name, history, period=14):
+        """
+        Plottar ROC och identifierar köp-/säljsignaler.
+        :param stock_name: Namnet på aktien.
+        :param history: Lista av tuples (datum, pris, volym).
+        :param period: ROC-period (standard 14 dagar).
+        """
+        if not history or len(history) < period:
+            print("Otillräckligt med data för ROC-beräkning.")
+            return
+
+        # Hantera tre kolumner: (datum, pris, volym), men vi använder bara datum och pris
+        df = pd.DataFrame(history, columns=["Date", "Price", "Volume"])
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date")
+
+        # Beräkna ROC
+        df["ROC"] = self.calculate_roc(df["Price"], period)
+
+        # Ta bort det sista värdet från dates och prices för att matcha längd på roc_values
+        dates = df["Date"][:len(df["ROC"])]
+        prices = df["Price"][:len(df["ROC"])]
+        roc_values = df["ROC"]
+
+        buy_signals = []
+        sell_signals = []
+
+        # Identifiera köp- och säljsignaler baserat på ROC
+        for i in range(len(roc_values)):
+            if pd.isna(roc_values[i]):
+                continue  # Hoppa över periodens första värden (som är NaN)
+
+            if roc_values[i] < 0:  # Köp när ROC < 0 (pris nedåt)
+                buy_signals.append((dates.iloc[i], prices.iloc[i]))
+
+            elif roc_values[i] > 0:  # Sälj när ROC > 0 (pris uppåt)
+                sell_signals.append((dates.iloc[i], prices.iloc[i]))
+
+        # Skriv ut köp- och säljsignaler
+        if buy_signals:
+            print(f"Köp-signaler för {stock_name}:")
+            for date, price in buy_signals:
+                print(f"  {date.strftime('%Y-%m-%d')}: {price:.2f} SEK")
+
+        if sell_signals:
+            print(f"Sälj-signaler för {stock_name}:")
+            for date, price in sell_signals:
+                print(f"  {date.strftime('%Y-%m-%d')}: {price:.2f} SEK")
+
+        # Plotta ROC och köp-/säljsignaler
+        plt.figure(figsize=(10, 6))
+        plt.plot(dates, roc_values, label="ROC", color="blue")
+
+        # Markera köp och säljsignaler
+        buy_dates, buy_prices = zip(*buy_signals) if buy_signals else ([], [])
+        sell_dates, sell_prices = zip(*sell_signals) if sell_signals else ([], [])
+        plt.scatter(buy_dates, buy_prices, marker="^", color="green", label="Köp Signal")
+        plt.scatter(sell_dates, sell_prices, marker="v", color="red", label="Sälj Signal")
+
+        plt.title(f"ROC för {stock_name}")
+        plt.xlabel("Datum")
+        plt.ylabel("ROC (%)")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
+
+    def apply_obv_strategy(self, stock_name, history):
+        """
+        Plottar OBV och identifierar köp-/säljsignaler baserat på OBV-strategi.
+        :param stock_name: Namnet på aktien.
+        :param history: Lista av tuples (datum, pris, volym).
+        """
+        if not history or len(history) < 2:
+            print("Otillräckligt med data för OBV-beräkning.")
+            return
+
+        # Hantera tre kolumner: (datum, pris, volym)
+        df = pd.DataFrame(history, columns=["Date", "Price", "Volume"])
+        df["Date"] = pd.to_datetime(df["Date"])
+        df = df.sort_values("Date")
+
+        # Beräkna OBV
+        df["OBV"] = 0
+        for i in range(1, len(df)):
+            if df["Price"].iloc[i] > df["Price"].iloc[i - 1]:  # Om priset stiger
+                df["OBV"].iloc[i] = df["OBV"].iloc[i - 1] + df["Volume"].iloc[i]
+            elif df["Price"].iloc[i] < df["Price"].iloc[i - 1]:  # Om priset faller
+                df["OBV"].iloc[i] = df["OBV"].iloc[i - 1] - df["Volume"].iloc[i]
+            else:  # Om priset är oförändrat
+                df["OBV"].iloc[i] = df["OBV"].iloc[i - 1]
+
+        # Identifiera köp- och säljsignaler baserat på OBV
+        buy_signals = []
+        sell_signals = []
+
+        for i in range(1, len(df)):
+            if df["OBV"].iloc[i] > df["OBV"].iloc[i - 1]:  # OBV ökar, köp-signal
+                buy_signals.append((df["Date"].iloc[i], df["Price"].iloc[i]))
+            elif df["OBV"].iloc[i] < df["OBV"].iloc[i - 1]:  # OBV minskar, sälj-signal
+                sell_signals.append((df["Date"].iloc[i], df["Price"].iloc[i]))
+
+        # Skriv ut köp- och säljsignaler
+        if buy_signals:
+            print(f"\n📈 Köp-signaler för {stock_name}:")
+            for date, price in buy_signals:
+                print(f"   - {date.strftime('%Y-%m-%d')} till pris {price:.2f} SEK")
+
+        if sell_signals:
+            print(f"\n📉 Sälj-signaler för {stock_name}:")
+            for date, price in sell_signals:
+                print(f"   - {date.strftime('%Y-%m-%d')} till pris {price:.2f} SEK")
+
+        # Plotta OBV och köp-/säljsignaler
+        plt.figure(figsize=(12, 6))
+        plt.plot(df["Date"], df["OBV"], label="OBV", color="purple")
+
+        # Markera köp och säljsignaler
+        buy_dates, buy_prices = zip(*buy_signals) if buy_signals else ([], [])
+        sell_dates, sell_prices = zip(*sell_signals) if sell_signals else ([], [])
+        plt.scatter(buy_dates, buy_prices, marker="^", color="green", label="Köp-signal", s=100)
+        plt.scatter(sell_dates, sell_prices, marker="v", color="red", label="Sälj-signal", s=100)
+
+        # Anpassa utseendet
+        plt.title(f"OBV för {stock_name}")
+        plt.xlabel("Datum")
+        plt.ylabel("OBV")
+        plt.legend()
+        plt.grid(True)
+        plt.xticks(rotation=45)
+        plt.show()
+
