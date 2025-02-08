@@ -34,6 +34,7 @@ class StockAnalyzer(QMainWindow):
         self.tools_menu = None
         self.db = DatabaseManager()
         self.analyzer = TechnicalAnalyzer()
+        #self.technical_analysis_option = None
         self.selected_stock = None
         self.setWindowTitle("Aktie-app")
         self.setGeometry(self.start_x, self.start_y, self.end_x, self.end_y)
@@ -86,10 +87,16 @@ class StockAnalyzer(QMainWindow):
 
         # Teknisk analys-menyn
         self.technical_analysis_menu = menu_bar.addMenu("Teknisk analys")
-        self.moving_average_action = QAction("Glidande medelvärde", self)
+        self.moving_average_action = QAction("SMA", self)
+        self.ema_action = QAction("EMA", self)
         self.moving_average_action.setEnabled(False)
-        self.moving_average_action.triggered.connect(self.show_moving_average)
+        self.ema_action.setEnabled(False)
+
+        self.moving_average_action.triggered.connect(lambda: self.apply_technical_analysis("SMA"))
+        self.ema_action.triggered.connect(lambda: self.apply_technical_analysis("EMA"))
+
         self.technical_analysis_menu.addAction(self.moving_average_action)
+        self.technical_analysis_menu.addAction(self.ema_action)
 
     def populate_stock_menu(self, stock_menu):
         stocks = self.db.get_all_stocks() or []
@@ -107,6 +114,7 @@ class StockAnalyzer(QMainWindow):
         self.graph_action.setEnabled(True)
         self.import_csv_action.setEnabled(True)
         self.moving_average_action.setEnabled(True)
+        self.ema_action.setEnabled(True)
         self.add_stock_data_action.setEnabled(True)
 
     def show_stock_info(self):
@@ -288,7 +296,8 @@ class StockAnalyzer(QMainWindow):
         except Exception as e:
             print(f"Fel vid import: {e}")
 
-    def show_moving_average(self):
+    def apply_technical_analysis(self, technical_analysis_option):
+
         if not self.selected_stock:
             print("Ingen aktie vald!")
             return
@@ -297,9 +306,10 @@ class StockAnalyzer(QMainWindow):
         if not history:
             print(f"Ingen historik hittades för {self.selected_stock}.")
             return
-
-        self.analyzer.apply_moving_average_strategy(self.selected_stock, history)
-
+        if technical_analysis_option == "SMA":
+            self.analyzer.apply_moving_average_strategy(self.selected_stock, history)
+        elif technical_analysis_option == "EMA":
+            self.analyzer.apply_ema_strategy(self.selected_stock, history)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
