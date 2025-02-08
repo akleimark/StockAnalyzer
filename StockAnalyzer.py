@@ -4,10 +4,12 @@ import sys
 import csv
 import numpy as np
 from datetime import datetime
+
+import pandas as pd
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication, QInputDialog, QAction, QMenu, QMainWindow, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget, QFileDialog, QLabel, QGridLayout
+    QTableWidgetItem, QVBoxLayout, QWidget, QFileDialog, QLabel, QGridLayout, QSpinBox, QDoubleSpinBox
 )
 import matplotlib
 matplotlib.use("Qt5Agg")  # Om du använder en Qt-baserad miljö
@@ -23,6 +25,8 @@ class StockAnalyzer(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.settings_action = None
+        self.misc_menu = None
         self.obv_action = None
         self.roc_action = None
         self.ema_action = None
@@ -107,6 +111,12 @@ class StockAnalyzer(QMainWindow):
         self.technical_analysis_menu.addAction(self.roc_action)
         self.technical_analysis_menu.addAction(self.obv_action)
 
+        # Menyn Övrigt
+        self.misc_menu = menu_bar.addMenu("Övrigt")
+        self.settings_action = QAction("Inställningar", self)
+        self.misc_menu.addAction(self.settings_action)
+        self.settings_action.triggered.connect(self.settings)
+
     def populate_stock_menu(self, stock_menu):
         stocks = self.db.get_all_stocks() or []
         unique_stock_names = set(stock[1] for stock in stocks)
@@ -128,20 +138,95 @@ class StockAnalyzer(QMainWindow):
         self.add_stock_data_action.setEnabled(True)
         self.obv_action.setEnabled(True)
 
+    def settings(self):
+        label_title_font = QFont("Georgia", 16)
+        label_title_font.setBold(True)
+        label_normal_font = QFont("Georgia", 14)
+
+        central_widget = QWidget(self)
+        layout = QGridLayout(central_widget)
+
+        # Lägg till etiketter och värden i layouten
+        label1 = QLabel("Historik (antal månader): ")
+        label1.setFont(label_title_font)
+
+        label2 = QLabel("Sharpe ratio (antal månader): ")
+        label2.setFont(label_title_font)
+
+        label3 = QLabel("Riskfri avkastning (%) för sharpe ratio: ")
+        label3.setFont(label_title_font)
+
+        # Skapa en QSpinBox för att välja antal månader
+        months_history_spinbox = QSpinBox()
+        months_history_spinbox.setFont(label_normal_font)
+        months_history_spinbox.setRange(1, 24)  # För att välja mellan 1 till 24 månader
+        months_history_spinbox.setValue(self.db.get_setting(
+            "history") or 6)  # Hämta tidigare inställning om det finns, annars standard till 6 månader
+
+        # Skapa en QSpinBox för att välja antal månader för Sharpe Ratio
+        months_sharpe_spinbox = QSpinBox()
+        months_sharpe_spinbox.setFont(label_normal_font)
+        months_sharpe_spinbox.setRange(1, 24)  # För att välja mellan 1 till 24 månader
+        months_sharpe_spinbox.setValue(self.db.get_setting(
+            "sharpe_ratio_months") or 6)  # Hämta tidigare inställning om det finns, annars standard till 6 månader
+
+        # Skapa en QSpinBox för att välja riskfri avkastning
+        risk_free_rate_spinbox = QSpinBox()
+        risk_free_rate_spinbox.setFont(label_normal_font)
+        risk_free_rate_spinbox.setRange(0, 100)  # För att välja mellan 0.0% till 10.0%
+        risk_free_rate_spinbox.setSingleStep(1)  # Steg på 1%
+        risk_free_rate_spinbox.setValue(
+            self.db.get_setting("risk_free_rate") or 2)  # Standard till 2% om ingen tidigare inställning finns
+
+        # Lägg till etiketter och värden i gridlayouten
+        layout.addWidget(label1, 0, 0)
+        layout.addWidget(months_history_spinbox, 0, 1)
+
+        layout.addWidget(label2, 1, 0)
+        layout.addWidget(months_sharpe_spinbox, 1, 1)
+
+        layout.addWidget(label3, 2, 0)
+        layout.addWidget(risk_free_rate_spinbox, 2, 1)
+
+        # När värdet för antal månader för historik ändras, spara den nya inställningen
+        def on_history_months_change(value):
+            self.db.set_setting("months_aspect", value)
+
+        # När värdet för antal månader för Sharpe Ratio ändras, spara den nya inställningen
+        def on_sharpe_months_change(value):
+            self.db.set_setting("sharpe_ratio_months", value)
+
+        # När värdet för riskfri avkastning ändras, spara den nya inställningen
+        def on_risk_free_rate_change(value):
+            self.db.set_setting("risk_free_rate", value)
+
+        # Anslut signalerna för när användaren ändrar värdet i spinboxarna
+        months_history_spinbox.valueChanged.connect(on_history_months_change)
+        months_sharpe_spinbox.valueChanged.connect(on_sharpe_months_change)
+        risk_free_rate_spinbox.valueChanged.connect(on_risk_free_rate_change)
+
+        self.setCentralWidget(central_widget)
+
     def show_stock_info(self):
         variance = 0.0
-        total_volume = 0
+        sharpe_ratio = 0
         if not self.selected_stock:
             return
 
-        # Hämta historik för de senaste 6 månaderna
-        history = self.db.get_stock_history(self.selected_stock, 6)
+        # Hämta historik enligt inställningarna
+        history = self.db.get_stock_history(self.selected_stock, self.db.get_setting("history"))
+
         if not history:
-            stock_info_text = f"Aktie: {self.selected_stock}\n\nIngen data för de senaste 6 månaderna."
+            stock_info_text = f"Aktie: {self.selected_stock}\n\nIngen data för de senaste X månaderna."
         else:
-            # Extrahera priser och volymer
-            prices = [price for _, price, _ in history]
-            volumes = [volume for _, _, volume in history]
+            # Kontrollera strukturen på 'history' och extrahera priser och volymer korrekt
+            try:
+                prices = [price for _, price, _ in history]  # Om history är tuples (datum, pris, volym)
+                volumes = [volume for _, _, volume in history]  # Om history innehåller volym
+            except ValueError:
+                # Om history inte har 3 kolumner
+                prices = [price for _, price in history]  # Första kolumnen är datum, andra är pris
+                volumes = [0] * len(prices)  # Sätt volym till 0 om ingen volym finns i historiken
 
             # Beräkna variansen
             variance = np.var(prices, ddof=1) if len(prices) > 1 else 0
@@ -149,10 +234,15 @@ class StockAnalyzer(QMainWindow):
             # Beräkna den totala volymen för de senaste 6 månaderna
             total_volume = sum(volumes)
 
+            # Beräkna sharpe ratio
+            sharpe_ratio = self.calculate_sharpe_ratio_from_price(prices, 0.01 * self.db.get_setting('risk_free_rate'),
+                                                                  self.db.get_setting('sharpe_ratio_months'))
+
             # Formatera texten för att visa både varians och total volym
             stock_info_text = f"Aktie: {self.selected_stock}\n\n"
-            stock_info_text += f"Varians (senaste 6 månaderna): {variance:.2f}\n"
-            stock_info_text += f"Total Volym (senaste 6 månaderna): {total_volume}"
+            stock_info_text += f"Varians (senaste X månaderna): {variance:.2f}\n"
+            stock_info_text += f"Total Volym (senaste X månaderna): {total_volume}\n"
+            stock_info_text += f"Sharpe Ratio (baserat på pris): {sharpe_ratio:.2f}"
 
         label_title_font = QFont("Georgia", 16)
         label_title_font.setBold(True)
@@ -169,12 +259,12 @@ class StockAnalyzer(QMainWindow):
         label3.setFont(label_title_font)
         label4 = QLabel(str(format(variance, ".2f")))
         label4.setFont(label_normal_font)
-        label5 = QLabel("Total Volym: ")
+        label5 = QLabel("Sharpe ratio:  ")
         label5.setFont(label_title_font)
-        label6 = QLabel(str(format(total_volume, ".0f")))
+        label6 = QLabel(str(format(sharpe_ratio, ".2f")))
         label6.setFont(label_normal_font)
 
-        # Lägg till etiketter och värden i gridlayouten
+        # Lägg till etiketter och värden i grid-layouten
         layout.addWidget(label1, 0, 0)
         layout.addWidget(label2, 0, 1)
         layout.addWidget(label3, 1, 0)
@@ -228,7 +318,7 @@ class StockAnalyzer(QMainWindow):
 
     def show_table(self):
         if self.selected_stock:
-            history = self.db.get_stock_history(self.selected_stock)
+            history = self.db.get_stock_history(self.selected_stock, self.db.get_setting('history'))
             if not history:
                 print(f"Ingen historik hittades för {self.selected_stock}.")
                 return
@@ -254,7 +344,7 @@ class StockAnalyzer(QMainWindow):
             return
 
         # Hämta aktiens historik från databasen
-        history = self.db.get_stock_history(self.selected_stock)
+        history = self.db.get_stock_history(self.selected_stock, self.db.get_setting('history'))
         if not history:
             print(f"Ingen historik hittades för {self.selected_stock}.")
             return
@@ -306,7 +396,7 @@ class StockAnalyzer(QMainWindow):
                 # Läs in rubrikraden och avgör om den behöver hoppas över
                 header = next(reader)
                 if header[0].lower() == "date" and header[1].lower() == "price" and header[2].lower() == "volume":
-                    print("Rubrikrad identifierad och hoppad över.")
+                    print("Rubrikrad identifierad och hoppas över.")
 
                 for row in reader:
                     if len(row) != 3:
@@ -343,13 +433,65 @@ class StockAnalyzer(QMainWindow):
         except Exception as e:
             print(f"Fel vid import: {e}")
 
+    def calculate_sharpe_ratio_from_price(self, prices, risk_free_rate=0.02, months=6):
+        """
+        Beräknar Sharpe Ratio baserat på aktiens prisdata för de senaste 'months' månaderna.
+
+        :param prices: Lista med pris (eller tuples med datum och pris).
+        :param risk_free_rate: Den riskfria räntan (t.ex. avkastning på statsobligationer). Standard är 0.
+        :param months: Antal månader bakåt som används för att beräkna Sharpe Ratio.
+
+        :return: Sharpe Ratio
+        """
+        # Om prices är en lista av tuples (datum, pris), extrahera priserna och datumen
+        if isinstance(prices[0], tuple):
+            dates = [datetime.strptime(date, "%Y-%m-%d") for date, _ in prices]
+            prices = [price for _, price in prices]
+        else:
+            dates = [None] * len(prices)  # Om inga datum ges, använd en lista med None
+
+        # Omvandla prislistan till en Pandas DataFrame
+        df = pd.DataFrame({"Date": dates, "Price": prices})
+
+        # Om datum inte finns, anta att priserna är i ordning utan specifika datum
+        if df["Date"].isnull().all():
+            # Om inget datum finns, använd bara de senaste priserna
+            df = df.tail(months * 30)  # Ungefärligt 30 dagar per månad
+
+        else:
+            # Filtrera ut de senaste 'months' månaderna från datan
+            end_date = df["Date"].max()
+            start_date = end_date - pd.DateOffset(months=months)
+            df = df[df["Date"] >= start_date]
+
+        # Om data inte finns för den angivna tidsramen, returnera None
+        if df.empty:
+            return None
+
+        # Beräkna daglig avkastning: (pris idag - pris igår) / pris igår
+        df["Return"] = df["Price"].pct_change()
+
+        # Ta bort den första raden eftersom avkastningen är NaN där
+        df = df.dropna(subset=["Return"])
+
+        # Beräkna genomsnittlig daglig avkastning
+        avg_return = df["Return"].mean()
+
+        # Beräkna standardavvikelse (volatilitet) för den dagliga avkastningen
+        return_volatility = df["Return"].std()
+
+        # Beräkna Sharpe Ratio
+        sharpe_ratio = (avg_return - risk_free_rate) / return_volatility
+
+        return sharpe_ratio
+
     def apply_technical_analysis(self, technical_analysis_option):
 
         if not self.selected_stock:
             print("Ingen aktie vald!")
             return
 
-        history = self.db.get_stock_history(self.selected_stock)
+        history = self.db.get_stock_history(self.selected_stock, self.db.get_setting('history'))
         if not history:
             print(f"Ingen historik hittades för {self.selected_stock}.")
             return
