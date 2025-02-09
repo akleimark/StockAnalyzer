@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import sqlite3
 
 class DatabaseManager:
@@ -72,7 +73,6 @@ class DatabaseManager:
         self.cursor.execute("SELECT * FROM stocks ORDER BY name, the_date")
         stocks = self.cursor.fetchall()
         return stocks
-        #return [Stock(name, date, price) for name, date, price in stocks]
 
     def get_stock_prices(self, stock_name):
         self.cursor.execute("""

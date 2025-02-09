@@ -119,9 +119,13 @@ class StockAnalyzer(QMainWindow):
 
     def populate_stock_menu(self, stock_menu):
         stocks = self.db.get_all_stocks() or []
-        unique_stock_names = set(stock[1] for stock in stocks)
+        unique_stock_names = set(stock[1] for stock in stocks)  # Hämta unika aktienamn
 
-        for stock_name in unique_stock_names:
+        # Sortera aktienamnen i bokstavsordning
+        sorted_stock_names = sorted(unique_stock_names)
+
+        # Lägg till aktier i menyn i ordning
+        for stock_name in sorted_stock_names:
             stock_action = QAction(stock_name, self)
             stock_action.triggered.connect(lambda checked, name=stock_name: self.select_stock(name))
             stock_menu.addAction(stock_action)
@@ -146,39 +150,65 @@ class StockAnalyzer(QMainWindow):
         central_widget = QWidget(self)
         layout = QGridLayout(central_widget)
 
-        # Lägg till etiketter och värden i layouten
+        # Etiketter
         label1 = QLabel("Historik (antal månader): ")
         label1.setFont(label_title_font)
 
         label2 = QLabel("Sharpe ratio (antal månader): ")
         label2.setFont(label_title_font)
 
-        label3 = QLabel("Riskfri avkastning (%) för sharpe ratio: ")
+        label3 = QLabel("Riskfri avkastning (%) för Sharpe Ratio: ")
         label3.setFont(label_title_font)
 
-        # Skapa en QSpinBox för att välja antal månader
+        label4 = QLabel("Startkapital för testköp (SEK): ")
+        label4.setFont(label_title_font)
+
+        # Ny etikett och QSpinBox för ROC-period
+        label5 = QLabel("ROC-period: ")
+        label5.setFont(label_title_font)
+
+        roc_period_spinbox = QSpinBox()
+        roc_period_spinbox.setFont(label_normal_font)
+        roc_period_spinbox.setRange(1, 50)  # Sätt intervallet för ROC-perioden
+        roc_period_spinbox.setValue(self.db.get_setting("roc_period") or 14)  # Standard 14
+
+        # Ny etikett och QSpinBox för ROC-threshold
+        label6 = QLabel("ROC-threshold (%): ")
+        label6.setFont(label_title_font)
+
+        roc_threshold_spinbox = QSpinBox()
+        roc_threshold_spinbox.setFont(label_normal_font)
+        roc_threshold_spinbox.setRange(-100, 100)  # ROC-threshold kan vara mellan -100 och 100
+        roc_threshold_spinbox.setSingleStep(1)
+        roc_threshold_spinbox.setValue(self.db.get_setting("roc_threshold") or 0)  # Standard 0
+
+        # QSpinBox för antal månader av historik
         months_history_spinbox = QSpinBox()
         months_history_spinbox.setFont(label_normal_font)
-        months_history_spinbox.setRange(1, 24)  # För att välja mellan 1 till 24 månader
-        months_history_spinbox.setValue(self.db.get_setting(
-            "history") or 6)  # Hämta tidigare inställning om det finns, annars standard till 6 månader
+        months_history_spinbox.setRange(1, 24)
+        months_history_spinbox.setValue(self.db.get_setting("history") or 6)
 
-        # Skapa en QSpinBox för att välja antal månader för Sharpe Ratio
+        # QSpinBox för antal månader för Sharpe Ratio
         months_sharpe_spinbox = QSpinBox()
         months_sharpe_spinbox.setFont(label_normal_font)
-        months_sharpe_spinbox.setRange(1, 24)  # För att välja mellan 1 till 24 månader
-        months_sharpe_spinbox.setValue(self.db.get_setting(
-            "sharpe_ratio_months") or 6)  # Hämta tidigare inställning om det finns, annars standard till 6 månader
+        months_sharpe_spinbox.setRange(1, 24)
+        months_sharpe_spinbox.setValue(self.db.get_setting("sharpe_ratio_months") or 6)
 
-        # Skapa en QSpinBox för att välja riskfri avkastning
+        # QSpinBox för riskfri avkastning
         risk_free_rate_spinbox = QSpinBox()
         risk_free_rate_spinbox.setFont(label_normal_font)
-        risk_free_rate_spinbox.setRange(0, 100)  # För att välja mellan 0.0% till 10.0%
-        risk_free_rate_spinbox.setSingleStep(1)  # Steg på 1%
-        risk_free_rate_spinbox.setValue(
-            self.db.get_setting("risk_free_rate") or 2)  # Standard till 2% om ingen tidigare inställning finns
+        risk_free_rate_spinbox.setRange(0, 100)
+        risk_free_rate_spinbox.setSingleStep(1)
+        risk_free_rate_spinbox.setValue(self.db.get_setting("risk_free_rate") or 2)
 
-        # Lägg till etiketter och värden i gridlayouten
+        # QSpinBox för startkapital vid testköp
+        start_capital_spinbox = QSpinBox()
+        start_capital_spinbox.setFont(label_normal_font)
+        start_capital_spinbox.setRange(1000, 1000000)  # Min 1000 SEK, max 1 miljon
+        start_capital_spinbox.setSingleStep(500)
+        start_capital_spinbox.setValue(self.db.get_setting("start_capital") or 10000)
+
+        # Lägg till widgets i layouten
         layout.addWidget(label1, 0, 0)
         layout.addWidget(months_history_spinbox, 0, 1)
 
@@ -188,22 +218,23 @@ class StockAnalyzer(QMainWindow):
         layout.addWidget(label3, 2, 0)
         layout.addWidget(risk_free_rate_spinbox, 2, 1)
 
-        # När värdet för antal månader för historik ändras, spara den nya inställningen
-        def on_history_months_change(value):
-            self.db.set_setting("months_aspect", value)
+        layout.addWidget(label4, 3, 0)  # Ny rad för startkapital
+        layout.addWidget(start_capital_spinbox, 3, 1)
 
-        # När värdet för antal månader för Sharpe Ratio ändras, spara den nya inställningen
-        def on_sharpe_months_change(value):
-            self.db.set_setting("sharpe_ratio_months", value)
+        # Lägg till ROC-period och ROC-threshold till layouten
+        layout.addWidget(label5, 4, 0)
+        layout.addWidget(roc_period_spinbox, 4, 1)
 
-        # När värdet för riskfri avkastning ändras, spara den nya inställningen
-        def on_risk_free_rate_change(value):
-            self.db.set_setting("risk_free_rate", value)
+        layout.addWidget(label6, 5, 0)
+        layout.addWidget(roc_threshold_spinbox, 5, 1)
 
-        # Anslut signalerna för när användaren ändrar värdet i spinboxarna
-        months_history_spinbox.valueChanged.connect(on_history_months_change)
-        months_sharpe_spinbox.valueChanged.connect(on_sharpe_months_change)
-        risk_free_rate_spinbox.valueChanged.connect(on_risk_free_rate_change)
+        # Funktioner för att spara ändringar i databasen
+        months_history_spinbox.valueChanged.connect(lambda value: self.db.set_setting("history", value))
+        months_sharpe_spinbox.valueChanged.connect(lambda value: self.db.set_setting("sharpe_ratio_months", value))
+        risk_free_rate_spinbox.valueChanged.connect(lambda value: self.db.set_setting("risk_free_rate", value))
+        start_capital_spinbox.valueChanged.connect(lambda value: self.db.set_setting("start_capital", value))
+        roc_period_spinbox.valueChanged.connect(lambda value: self.db.set_setting("roc_period", value))
+        roc_threshold_spinbox.valueChanged.connect(lambda value: self.db.set_setting("roc_threshold", value))
 
         self.setCentralWidget(central_widget)
 
@@ -496,11 +527,11 @@ class StockAnalyzer(QMainWindow):
             print(f"Ingen historik hittades för {self.selected_stock}.")
             return
         if technical_analysis_option == "SMA":
-            self.analyzer.apply_moving_average_strategy(self.selected_stock, history)
+            self.analyzer.apply_moving_average_strategy(self.selected_stock, history, self.db.get_setting('start_capital') or 10000)
         elif technical_analysis_option == "EMA":
-            self.analyzer.apply_ema_strategy(self.selected_stock, history)
+            self.analyzer.apply_ema_strategy(self.selected_stock, history, self.db.get_setting('start_capital') or 10000)
         elif technical_analysis_option == "ROC":
-            self.analyzer.apply_roc_strategy(self.selected_stock, history)
+            self.analyzer.apply_roc_strategy(self.selected_stock, history, self.db.get_setting('start_capital') or 10000, self.db.get_setting('roc_period') or 14, self.db.get_setting('roc_threshold') or 1)
         elif technical_analysis_option == "OBV":
             self.analyzer.apply_obv_strategy(self.selected_stock, history)
 
