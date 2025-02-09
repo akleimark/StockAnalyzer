@@ -12,6 +12,9 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QVBoxLayout, QWidget, QFileDialog, QLabel, QGridLayout, QSpinBox, QDoubleSpinBox
 )
 import matplotlib
+
+from SwingTradingStrategy import SwingTradingStrategy
+
 matplotlib.use("Qt5Agg")  # Om du använder en Qt-baserad miljö
 import matplotlib.pyplot as plt
 from Database import DatabaseManager
@@ -96,20 +99,24 @@ class StockAnalyzer(QMainWindow):
         self.ema_action = QAction("EMA", self)
         self.roc_action = QAction("ROC", self)
         self.obv_action = QAction("OBV", self)
+        self.swing_action = QAction("Swing", self)
         self.moving_average_action.setEnabled(False)
         self.ema_action.setEnabled(False)
         self.roc_action.setEnabled(False)
         self.obv_action.setEnabled(False)
+        self.swing_action.setEnabled(False)
 
         self.moving_average_action.triggered.connect(lambda: self.apply_technical_analysis("SMA"))
         self.ema_action.triggered.connect(lambda: self.apply_technical_analysis("EMA"))
         self.roc_action.triggered.connect(lambda: self.apply_technical_analysis("ROC"))
         self.obv_action.triggered.connect(lambda: self.apply_technical_analysis("OBV"))
+        self.swing_action.triggered.connect(lambda: self.apply_technical_analysis("SWING"))
 
         self.technical_analysis_menu.addAction(self.moving_average_action)
         self.technical_analysis_menu.addAction(self.ema_action)
         self.technical_analysis_menu.addAction(self.roc_action)
         self.technical_analysis_menu.addAction(self.obv_action)
+        self.technical_analysis_menu.addAction(self.swing_action)
 
         # Menyn Övrigt
         self.misc_menu = menu_bar.addMenu("Övrigt")
@@ -141,6 +148,7 @@ class StockAnalyzer(QMainWindow):
         self.roc_action.setEnabled(True)
         self.add_stock_data_action.setEnabled(True)
         self.obv_action.setEnabled(True)
+        self.swing_action.setEnabled(True)
 
     def settings(self):
         label_title_font = QFont("Georgia", 16)
@@ -534,6 +542,9 @@ class StockAnalyzer(QMainWindow):
             self.analyzer.apply_roc_strategy(self.selected_stock, history, self.db.get_setting('start_capital') or 10000, self.db.get_setting('roc_period') or 14, self.db.get_setting('roc_threshold') or 1)
         elif technical_analysis_option == "OBV":
             self.analyzer.apply_obv_strategy(self.selected_stock, history)
+        elif technical_analysis_option == "SWING":
+            swing_strategy = SwingTradingStrategy(history)
+            swing_strategy.run()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
