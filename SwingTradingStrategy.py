@@ -27,6 +27,16 @@ class SwingTradingStrategy:
         rs = gain / loss
         self.df["RSI"] = 100 - (100 / (1 + rs))
 
+        # OBV (On-Balance Volume)
+        self.df["OBV"] = 0
+        for i in range(1, len(self.df)):
+            if self.df["Price"].iloc[i] > self.df["Price"].iloc[i-1]:
+                self.df["OBV"].iloc[i] = self.df["OBV"].iloc[i-1] + self.df["Volume"].iloc[i]
+            elif self.df["Price"].iloc[i] < self.df["Price"].iloc[i-1]:
+                self.df["OBV"].iloc[i] = self.df["OBV"].iloc[i-1] - self.df["Volume"].iloc[i]
+            else:
+                self.df["OBV"].iloc[i] = self.df["OBV"].iloc[i-1]
+
     def apply_strategy(self):
         holding = None
         total_profit = 0
@@ -37,10 +47,12 @@ class SwingTradingStrategy:
 
             # Köp-signal (Swing Entry) - Kontrollera om vi redan har ett innehav
             if holding is None and (row["SMA_short"] > row["SMA_long"] and row["RSI"] < 50):
-                num_shares = self.start_capital // row["Price"]
-                holding = (row["Date"], row["Price"], num_shares)  # Starta en ny position
-                self.trades.append(
-                    f"📈 Köp-signal: {row['Date'].strftime('%Y-%m-%d')} - Köp {num_shares:.1f} aktier till {row['Price']:.2f} SEK")
+                # Lägg till OBV-bekräftelse
+                if row["OBV"] > self.df["OBV"].iloc[i-1]:  # Kontrollera om OBV ökar
+                    num_shares = self.start_capital // row["Price"]
+                    holding = (row["Date"], row["Price"], num_shares)  # Starta en ny position
+                    self.trades.append(
+                        f"📈 Köp-signal: {row['Date'].strftime('%Y-%m-%d')} - Köp {num_shares:.1f} aktier till {row['Price']:.2f} SEK")
 
             # Kontrollera om stop-loss eller take-profit ska triggas
             elif holding is not None:
@@ -89,8 +101,9 @@ class SwingTradingStrategy:
         plt.plot(self.df["Date"], self.df["Price"], label="Pris", color="blue")
         plt.plot(self.df["Date"], self.df["SMA_short"], label=f"SMA {self.short_sma}", color="green")
         plt.plot(self.df["Date"], self.df["SMA_long"], label=f"SMA {self.long_sma}", color="red")
+        plt.plot(self.df["Date"], self.df["OBV"], label="OBV", color="purple")
         plt.legend()
-        plt.title("Swing Trading Strategi med Stop-Loss och Take-Profit")
+        plt.title("Swing Trading Strategi med Stop-Loss, Take-Profit och OBV")
         plt.xlabel("Datum")
         plt.ylabel("Pris")
         plt.grid()

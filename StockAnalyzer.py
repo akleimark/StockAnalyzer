@@ -13,12 +13,15 @@ from PyQt5.QtWidgets import (
 )
 import matplotlib
 
-from SwingTradingStrategy import SwingTradingStrategy
+from EMAStrategy import EMAStrategy
+from FibonacciStrategy import FibonacciStrategy
+from OBVStrategy import OBVStrategy
+from ROCStrategy import ROCStrategy
+from SMAStrategy import SMAStrategy
 
 matplotlib.use("Qt5Agg")  # Om du använder en Qt-baserad miljö
 import matplotlib.pyplot as plt
 from Database import DatabaseManager
-from Stock import TechnicalAnalyzer
 
 class StockAnalyzer(QMainWindow):
     start_x = 100
@@ -42,7 +45,6 @@ class StockAnalyzer(QMainWindow):
         self.show_stock_info_action = None
         self.tools_menu = None
         self.db = DatabaseManager()
-        self.analyzer = TechnicalAnalyzer()
         self.selected_stock = None
         self.setWindowTitle("Aktie-app")
         self.setGeometry(self.start_x, self.start_y, self.end_x, self.end_y)
@@ -99,24 +101,24 @@ class StockAnalyzer(QMainWindow):
         self.ema_action = QAction("EMA", self)
         self.roc_action = QAction("ROC", self)
         self.obv_action = QAction("OBV", self)
-        self.swing_action = QAction("Swing", self)
+        self.fibonacci_retracement_action = QAction("Fibonacci Retracement", self)
         self.moving_average_action.setEnabled(False)
         self.ema_action.setEnabled(False)
         self.roc_action.setEnabled(False)
         self.obv_action.setEnabled(False)
-        self.swing_action.setEnabled(False)
+        self.fibonacci_retracement_action.setEnabled(False)
 
         self.moving_average_action.triggered.connect(lambda: self.apply_technical_analysis("SMA"))
         self.ema_action.triggered.connect(lambda: self.apply_technical_analysis("EMA"))
         self.roc_action.triggered.connect(lambda: self.apply_technical_analysis("ROC"))
         self.obv_action.triggered.connect(lambda: self.apply_technical_analysis("OBV"))
-        self.swing_action.triggered.connect(lambda: self.apply_technical_analysis("SWING"))
+        self.fibonacci_retracement_action.triggered.connect(lambda: self.apply_technical_analysis("FIBONACCI_RETRACEMENT"))
 
         self.technical_analysis_menu.addAction(self.moving_average_action)
         self.technical_analysis_menu.addAction(self.ema_action)
         self.technical_analysis_menu.addAction(self.roc_action)
         self.technical_analysis_menu.addAction(self.obv_action)
-        self.technical_analysis_menu.addAction(self.swing_action)
+        self.technical_analysis_menu.addAction(self.fibonacci_retracement_action)
 
         # Menyn Övrigt
         self.misc_menu = menu_bar.addMenu("Övrigt")
@@ -148,7 +150,7 @@ class StockAnalyzer(QMainWindow):
         self.roc_action.setEnabled(True)
         self.add_stock_data_action.setEnabled(True)
         self.obv_action.setEnabled(True)
-        self.swing_action.setEnabled(True)
+        self.fibonacci_retracement_action.setEnabled(True)
 
     def settings(self):
         label_title_font = QFont("Georgia", 16)
@@ -525,26 +527,28 @@ class StockAnalyzer(QMainWindow):
         return sharpe_ratio
 
     def apply_technical_analysis(self, technical_analysis_option):
-
         if not self.selected_stock:
             print("Ingen aktie vald!")
             return
-
         history = self.db.get_stock_history(self.selected_stock, self.db.get_setting('history'))
         if not history:
             print(f"Ingen historik hittades för {self.selected_stock}.")
             return
         if technical_analysis_option == "SMA":
-            self.analyzer.apply_moving_average_strategy(self.selected_stock, history, self.db.get_setting('start_capital') or 10000)
+            strategy = SMAStrategy()
+            strategy.execute(self.selected_stock, history, self.db.get_setting('start_capital') or 10000)
         elif technical_analysis_option == "EMA":
-            self.analyzer.apply_ema_strategy(self.selected_stock, history, self.db.get_setting('start_capital') or 10000)
+            strategy = EMAStrategy()
+            strategy.execute(self.selected_stock, history, self.db.get_setting('start_capital') or 10000)
         elif technical_analysis_option == "ROC":
-            self.analyzer.apply_roc_strategy(self.selected_stock, history, self.db.get_setting('start_capital') or 10000, self.db.get_setting('roc_period') or 14, self.db.get_setting('roc_threshold') or 1)
+            strategy = ROCStrategy()
+            strategy.execute(self.selected_stock, history, self.db.get_setting('start_capital') or 10000, self.db.get_setting('roc_period') or 14, self.db.get_setting('roc_threshold') or 1)
         elif technical_analysis_option == "OBV":
-            self.analyzer.apply_obv_strategy(self.selected_stock, history)
-        elif technical_analysis_option == "SWING":
-            swing_strategy = SwingTradingStrategy(history)
-            swing_strategy.run()
+            strategy = OBVStrategy()
+            strategy.execute(self.selected_stock, history)
+        elif technical_analysis_option == "FIBONACCI_RETRACEMENT":
+            strategy = FibonacciStrategy()
+            strategy.execute(self.selected_stock, history)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
